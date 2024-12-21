@@ -71,32 +71,42 @@ def separate_rules(rules: list) -> tuple[list,dict]: # returns a tuple of table 
     table_rules = []
     column_rules = {}
     for rule in rules:
-        if 'column' not in rule.keys():
+        if 'column' not in rule.keys(): # if rule is a table rule
             table_rules.append(rule)
         else: 
-            column_rules[rule['column']] = rule
+            wo_column = rule.copy()
+            wo_column.pop('column')
+            if rule['column'] in column_rules.keys(): # if column already exists in column_rules
+                column_rules[rule['column']].append(wo_column)
+            else:
+                column_rules[rule['column']] = [wo_column]
     return table_rules, column_rules
-
 
 
 # Helper function to generate YAML
 # TODO Ensure the format matches the working model definition
 def generate_yaml():
-    table_rules, column_rules = separate_rules(st.session_state["rules"])
-    yaml_doc = {    'version': 2, 
+    table_rules, column_rules = separate_rules(st.session_state["tests"])
+    print(table_rules,column_rules)
+    basename = uploaded_file.name.replace(".csv",'')
+    basename = basename.replace(".xlsx",'')
+    yaml_doc = {    
+                    'version': 2, 
                     'models': [
-                        {'name': uploaded_file.name.replace(".csv",''),
+                        {'name': basename,
                          'description': 'Synthesised rules from DQ rule builder',
                          'config': {'materialized': True},
-                         'rules': table_rules,
                             'columns': [
                                 {'name': col,
-                                'rules': rules
+                                'tests': rules
                                 } for col, rules in column_rules.items()
                             ]
                         }
                     ]
                 }
+    if len(table_rules) > 0:
+        yaml_doc['models'][0]['tests'] = table_rules
+
     return yaml.dump(yaml_doc, sort_keys=False)
 
 # Helper function to parse YAML
@@ -136,8 +146,8 @@ with data:
             if existing_rules_yaml:
                 rules = parse_yaml(existing_rules_yaml.read().decode())["expectations"]
             
-            if "rules" not in st.session_state:
-                st.session_state["rules"] = rules
+            if "tests" not in st.session_state:
+                st.session_state["tests"] = rules
             
             selected_rule = st.selectbox("Select a Rule", 
                                         list(DBT_RULES.keys()), 
@@ -170,19 +180,24 @@ with data:
                     case "interval":
                         rule_params[param] = st.number_input(f"Enter {param} (e.g., every N intervals)", step=1)
             
-            rule_params['row_condition'] = st.text_input(f"Enter row condition", placeholder='Enter a condition that will limit the rows this rule is applied to')
-            rule_params['strictly'] = st.checkbox(f"Strict? See https://github.com/calogica/dbt-expectations/tree/0.10.4/?tab=readme-ov-file")
-
+            row_condition = st.text_input(f"Enter row condition", placeholder='Enter a condition that will limit the rows this rule is applied to')
+            if len(row_condition) > 0:
+                rule_params['row_condition'] = row_condition
+            strictly = st.checkbox(f"Strict? See https://github.com/calogica/dbt-expectations/tree/0.10.4/?tab=readme-ov-file", value=True)
+            
+            if not strictly:
+                rule_params['strictly'] = False
 
             if st.button("Add Rule"):
-                st.session_state["rules"].append({"rule": selected_rule, **rule_params})
+                st.session_state["tests"].append({"test": selected_rule, **rule_params})
+
         with view:
             if uploaded_file:    
                 st.write("### Defined Rules")
-                for idx, rule in enumerate(st.session_state["rules"]):
-                    st.write(f"Rule {idx + 1}: {rule}")
-                    if st.button(f"Remove Rule {idx + 1}", key=f"remove_{idx}"):
-                        st.session_state["rules"].pop(idx)
+                for idx, rule in enumerate(st.session_state["tests"]):
+                    st.write(f"Test {idx + 1}: {rule}")
+                    if st.button(f"Remove Test {idx + 1}", key=f"remove_{idx}"):
+                        st.session_state["tests"].pop(idx)
                 
                 st.write("## Export Rules to YAML")
                 yaml_output = generate_yaml()
