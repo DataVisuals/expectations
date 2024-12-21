@@ -3,6 +3,7 @@ import pandas as pd
 import yaml
 from io import StringIO
 import os.path
+import json
 
 
 st.set_page_config(layout='wide')
@@ -81,7 +82,6 @@ def separate_rules(rules: list) -> tuple[list,dict]: # returns a tuple of table 
             else:
                 column_rules[rule['column']] = [wo_column]
     return table_rules, column_rules
-
 
 # Helper function to generate YAML
 # TODO Ensure the format matches the working model definition
