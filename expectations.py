@@ -128,28 +128,29 @@ with data:
             
             rule_params = {}
             for param in selected_parameters:
-                if param == "column":
-                    rule_params[param] = st.selectbox(f"Select {param}", headers)
-                elif param in ["column_A", "column_B"]:
-                    rule_params[param] = st.selectbox(f"Select {param}", headers)
-                elif param.endswith("_value"):
-                    rule_params[param] = st.number_input(f"Enter {param}", step=0.01)
-                elif param == "regex":
-                    rule_params[param] = st.text_input(f"Enter {param}")
-                elif param in ["value_set", "type_list", "like_pattern_list", "unlike_pattern_list"]:
-                    value_set = st.text_area(f"Enter {param} (comma-separated values)")
-                    rule_params[param] = [v.strip() for v in value_set.split(",") if v.strip()]
-                elif param == "column_list":
-                    column_list = st.multiselect(f"Select {param}", headers)
-                    rule_params[param] = column_list
-                elif param == "date_column":
-                    rule_params[param] = st.selectbox(f"Select {param}", headers)
-                elif param == "n":
-                    rule_params[param] = st.number_input(f"Enter {param} (e.g., days, months)", step=1)
-                elif param == "datepart":
-                    rule_params[param] = st.selectbox(f"Select {param}", ["day", "month", "year"])
-                elif param == "interval":
-                    rule_params[param] = st.number_input(f"Enter {param} (e.g., every N intervals)", step=1)
+                match param:
+                    case "column":
+                        rule_params[param] = st.selectbox(f"Select {param}", headers)
+                    case "column_A" | "column_B":
+                        rule_params[param] = st.selectbox(f"Select {param}", headers)
+                    case 'max_value' | 'min_value':
+                        rule_params[param] = st.number_input(f"Enter {param}", step=0.01)
+                    case "regex":
+                        rule_params[param] = st.text_input(f"Enter {param}")
+                    case "value_set" | "type_list" | "like_pattern_list" | "unlike_pattern_list":
+                        value_set = st.text_area(f"Enter {param} (comma-separated values)")
+                        rule_params[param] = [v.strip() for v in value_set.split(",") if v.strip()]
+                    case "column_list":
+                        column_list = st.multiselect(f"Select {param}", headers)
+                        rule_params[param] = column_list
+                    case "date_column":
+                        rule_params[param] = st.selectbox(f"Select {param}", headers)
+                    case "n":
+                        rule_params[param] = st.number_input(f"Enter {param} (e.g., days, months)", step=1)
+                    case "datepart":
+                        rule_params[param] = st.selectbox(f"Select {param}", ["day", "month", "year"])
+                    case "interval":
+                        rule_params[param] = st.number_input(f"Enter {param} (e.g., every N intervals)", step=1)
             
             rule_params['row_condition'] = st.text_input(f"Enter row condition", placeholder='Enter a condition that will limit the rows this rule is applied to')
             rule_params['strictly'] = st.checkbox(f"Strict? See https://github.com/calogica/dbt-expectations/tree/0.10.4/?tab=readme-ov-file")
