@@ -1,0 +1,9 @@
+expectations:
+- rule: expect_column_to_exist
+  column: account
+- rule: expect_column_to_exist
+  column: customer
+- rule: expect_column_to_exist
+  column: amount
+- rule: expect_column_to_exist
+  column: type
