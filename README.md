@@ -1,9 +1,12 @@
-### Expectations
+# Expectations
 
-This project allows anyone to provide a test file in csv or excel format that can be used to define tests suitable for execution using dbt-expectations.
+This project allows anyone to provide a test file in csv or excel format that can be used to define tests suitable for execution using dbt-expectations. The file is used to determine columns available for testing and test data to run the expectations against.
+
 The app runs using streamlit 
 
 `streamlit run expectations.py`
+
+this will open the app in a browser.
 
 ## WIP instructions 
 1. Upload a file
