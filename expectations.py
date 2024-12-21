@@ -67,15 +67,33 @@ DBT_RULES = {
     "dbt_expectations.expect_table_columns_to_be_subset_of": ["column_set"],
 }
 
+def separate_rules(rules: list) -> tuple[list,dict]: # returns a tuple of table rules and column rules 
+    table_rules = []
+    column_rules = {}
+    for rule in rules:
+        if 'column' not in rule.keys():
+            table_rules.append(rule)
+        else: 
+            column_rules[rule['column']] = rule
+    return table_rules, column_rules
+
+
+
 # Helper function to generate YAML
 # TODO Ensure the format matches the working model definition
 def generate_yaml():
+    table_rules, column_rules = separate_rules(st.session_state["rules"])
     yaml_doc = {    'version': 2, 
                     'models': [
                         {'name': uploaded_file.name.replace(".csv",''),
                          'description': 'Synthesised rules from DQ rule builder',
                          'config': {'materialized': True},
-                         'columns': st.session_state["rules"]
+                         'rules': table_rules,
+                            'columns': [
+                                {'name': col,
+                                'rules': rules
+                                } for col, rules in column_rules.items()
+                            ]
                         }
                     ]
                 }
