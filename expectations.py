@@ -10,7 +10,7 @@ from pprint import pprint
 st.set_page_config(layout='wide')
 uploaded_file = None
 
-# Define all dbt-expectations rules and their parameters
+# TODO Define all dbt-expectations rules and their parameters
 # TODO Optionals e.g. Group by, Step, is raw, flags, compare_group_by etc
 DBT_RULES = {
     "dbt_expectations.expect_column_to_exist": ["column"],
@@ -96,7 +96,6 @@ def separate_rules(rules: list) -> tuple[dict,dict]: # returns a tuple of table 
                     column_rules[rule['column']] = [{rule_name: cols_wo_keys}]
     return table_rules, column_rules
 
-# Helper function to generate YAML
 def generate_yaml(table_name=None):
     table_rules, column_rules = separate_rules(st.session_state["tests"])
     if table_name is None:
@@ -118,7 +117,6 @@ def generate_yaml(table_name=None):
     yaml_doc['models'][0] = {k: v for k, v in yaml_doc['models'][0].items() if v is not None}
     return yaml.dump(yaml_doc, sort_keys=False, default_flow_style=False)
 
-# Helper function to parse YAML
 def parse_yaml(yaml_content):
     try:
         return yaml.safe_load(yaml_content)
@@ -154,8 +152,6 @@ def dbt_command(command: str, model_name: str):
         results.append({'Name': r.node.name, 'Result' : icon if command == 'test' else r.status, 'Execution Time': r.execution_time})
     st.dataframe(pd.DataFrame(results),hide_index=True, width=1000) 
 
-data, define, view, exec_tests = st.tabs(['Data', 'Define Rules', 'View Rules', 'Execute Tests'])
-
 def write_csv(uploaded_file, csv_file):
     b = uploaded_file.getvalue()
     with open(f'{csv_file}', "wb") as f:
@@ -171,9 +167,62 @@ def write_yaml(generate_yaml, model_name):
     with open(f'expectations/models/example/{model_name}.yml', "w") as f:
         f.write(yaml)
 
+def build_form_from_parameters(headers, selected_parameters):
+    rule_params = {}
+    for param in selected_parameters:
+        match param:
+            case "column":
+                rule_params[param] = st.selectbox(f"Select {param}", headers)
+            case "column_A" | "column_B":
+                rule_params[param] = st.selectbox(f"Select {param}", headers)
+            case 'max_value' | 'min_value':
+                rule_params[param] = st.number_input(f"Enter {param}", step=0.01)
+            case "regex":
+                rule_params[param] = st.text_input(f"Enter {param}")
+            case "value_set" | "like_pattern_list" | "unlike_pattern_list" | "column_type_list":
+                value_set = st.text_area(f"Enter {param} (comma-separated values)")
+                rule_params[param] = [v.strip() for v in value_set.split(",") if v.strip()]
+            case "column_list":
+                column_list = st.multiselect(f"Select {param}", headers)
+                rule_params[param] = column_list
+            case "date_column":
+                rule_params[param] = st.selectbox(f"Select {param}", headers)
+            case "n":
+                rule_params[param] = st.number_input(f"Enter {param} (e.g., days, months)", step=1)
+            case "datepart":
+                rule_params[param] = st.selectbox(f"Select {param}", ["day", "month", "year"])
+            case "interval":
+                rule_params[param] = st.number_input(f"Enter {param} (e.g., every N intervals)", step=1)
+    return rule_params
+
+def add_rule_to_session(selected_rule, rule_params):
+    if st.session_state.get("tests", None) is None:
+        st.session_state["tests"] = [{"test": selected_rule, **rule_params}]
+    else:
+        st.session_state["tests"].append({"test": selected_rule, **rule_params})
+
+def display_defined_rules():
+    st.write("### Defined Rules")
+    for idx, rule in enumerate(st.session_state["tests"]):
+        st.write(f"Test {idx + 1}: {rule}")
+        if st.button(f"Remove Test {idx + 1}", key=f"remove_{idx}"):
+            st.session_state["tests"].pop(idx)
+
+def save_rules():
+    st.write("## Save the rules")
+    if st.session_state.get('model_name', None):
+        yaml_output = generate_yaml(st.session_state.get('model_name'))
+    else:
+        yaml_output = generate_yaml()
+    st.code(yaml_output, language="yaml")
+    # st.download_button("Download YAML", yaml_output, "rules.yaml", "text/yaml")
+
 #########################################################################################
 # Streamlit UI
 #########################################################################################
+
+data, define, view, exec_tests = st.tabs(['Data', 'Define Rules', 'View Rules', 'Execute Tests'])
+
 with data:
     uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xls", "xlsx"])
     if uploaded_file:
@@ -197,31 +246,7 @@ with data:
                                         format_func=format_rule_nicely)
             selected_parameters = DBT_RULES[selected_rule]
             
-            rule_params = {}
-            for param in selected_parameters:
-                match param:
-                    case "column":
-                        rule_params[param] = st.selectbox(f"Select {param}", headers)
-                    case "column_A" | "column_B":
-                        rule_params[param] = st.selectbox(f"Select {param}", headers)
-                    case 'max_value' | 'min_value':
-                        rule_params[param] = st.number_input(f"Enter {param}", step=0.01)
-                    case "regex":
-                        rule_params[param] = st.text_input(f"Enter {param}")
-                    case "value_set" | "like_pattern_list" | "unlike_pattern_list" | "column_type_list":
-                        value_set = st.text_area(f"Enter {param} (comma-separated values)")
-                        rule_params[param] = [v.strip() for v in value_set.split(",") if v.strip()]
-                    case "column_list":
-                        column_list = st.multiselect(f"Select {param}", headers)
-                        rule_params[param] = column_list
-                    case "date_column":
-                        rule_params[param] = st.selectbox(f"Select {param}", headers)
-                    case "n":
-                        rule_params[param] = st.number_input(f"Enter {param} (e.g., days, months)", step=1)
-                    case "datepart":
-                        rule_params[param] = st.selectbox(f"Select {param}", ["day", "month", "year"])
-                    case "interval":
-                        rule_params[param] = st.number_input(f"Enter {param} (e.g., every N intervals)", step=1)
+            rule_params = build_form_from_parameters(headers, selected_parameters)
             
             row_condition = st.text_input(f"Enter row condition", placeholder='Enter a condition that will limit the rows this rule is applied to')
             if len(row_condition) > 0:
@@ -232,27 +257,12 @@ with data:
                 rule_params['strictly'] = False
 
             if st.button("Add Rule"):
-                # tests param in session state is a list of dictionaries
-                # each dictionary contains the rule and its parameters
-                if st.session_state.get("tests", None) is None:
-                    st.session_state["tests"] = [{"test": selected_rule, **rule_params}]
-                else:
-                    st.session_state["tests"].append({"test": selected_rule, **rule_params})
+                add_rule_to_session(selected_rule, rule_params)
 
         with view:
             if uploaded_file and st.session_state.get("tests",None):    
-                st.write("### Defined Rules")
-                for idx, rule in enumerate(st.session_state["tests"]):
-                    st.write(f"Test {idx + 1}: {rule}")
-                    if st.button(f"Remove Test {idx + 1}", key=f"remove_{idx}"):
-                        st.session_state["tests"].pop(idx)
-                st.write("## Save the rulesL")
-                if st.session_state.get('model_name', None):
-                    yaml_output = generate_yaml(st.session_state.get('model_name'))
-                else:
-                    yaml_output = generate_yaml()
-                st.code(yaml_output, language="yaml")
-                #st.download_button("Download YAML", yaml_output, "rules.yaml", "text/yaml")
+                display_defined_rules()
+                save_rules()
         
         with exec_tests:
             if uploaded_file:

@@ -2,28 +2,12 @@ version: 2
 models:
 - name: my_table
   columns:
-  - name: account
+  - name: account_num
     tests:
-    - dbt_expectations.expect_column_values_to_be_in_type_list:
-        column_type_list:
-        - varchar
-  - name: customer
-    tests:
-    - dbt_expectations.expect_column_values_to_be_in_type_list:
-        column_type_list:
-        - varchar
-  - name: paid
-    tests:
-    - dbt_expectations.expect_column_values_to_be_in_type_list:
-        column_type_list:
-        - bigint
-  - name: type
-    tests:
-    - dbt_expectations.expect_column_values_to_match_regex:
-        regex: b.*
+    - dbt_expectations.expect_column_values_to_be_unique
     - dbt_expectations.expect_column_values_to_be_in_set:
         value_set:
-        - btl
-    - dbt_expectations.expect_column_values_to_be_in_set:
-        value_set:
-        - btw
+        - '1'
+        - '2'
+        - '3'
+        - '4'
