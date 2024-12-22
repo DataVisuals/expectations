@@ -5,7 +5,9 @@ This project allows anyone to provide a test file in csv or excel format that ca
 
 The app runs using streamlit 
 
-`streamlit run expectations.py`
+```
+streamlit run expectations.py
+```
 
 this will open the app in a browser.
 
