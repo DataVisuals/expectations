@@ -19,16 +19,17 @@ TODO
 
 1. Type inference in duckdb will mean 0001 is inferred as text. 
 2. YAML serialisation allows use of canonical form like this
-'code'
+
+```yaml
 - Key
    - Element 1
    - Element 2
-'code'
+```
  and also 
 
- 'code'
+```yaml
 - Key
    - ['Element 1', 'Element 2']
-'code'
+```
 
 It looks like dbt-expectations normally requires canonical form but not for some of the table level rules.
