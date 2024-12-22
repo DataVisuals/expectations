@@ -4,7 +4,7 @@ import yaml
 from io import StringIO
 import os.path
 import json
-
+from dbt.cli.main import dbtRunner, dbtRunnerResult
 
 st.set_page_config(layout='wide')
 uploaded_file = None
@@ -85,48 +85,54 @@ def separate_rules(rules: list) -> tuple[list,dict]: # returns a tuple of table 
 
 # Helper function to generate YAML
 # TODO Ensure the format matches the working model definition
-def generate_yaml():
+def generate_yaml(table_name=None):
     table_rules, column_rules = separate_rules(st.session_state["tests"])
-    print(table_rules,column_rules)
-    basename = uploaded_file.name.replace(".csv",'')
-    basename = basename.replace(".xlsx",'')
-    yaml_doc = {    
-                    'version': 2, 
-                    'models': [
-                        {'name': basename,
-                         'description': 'Synthesised rules from DQ rule builder',
-                         'config': {'materialized': True},
-                            'columns': [
-                                {'name': col,
-                                'tests': rules
-                                } for col, rules in column_rules.items()
-                            ]
-                        }
-                    ]
-                }
-    if len(table_rules) > 0:
-        yaml_doc['models'][0]['tests'] = table_rules
-
+    if table_name is None:
+        table_name = os.path.splitext(uploaded_file.name)[0]
+    for col, rules in column_rules.items():
+        print(f' Column is {col} rules are {rules}')
+    yaml_doc = {
+        'version': 2,
+        'models': [
+            {
+                'name': table_name,
+                'description': 'Synthesised rules from DQ rule builder',
+                'config': {'materialized': 'true'},
+                'tests': table_rules if table_rules else None,
+                'columns': [{'name': col, 'tests': rules} for col, rules in column_rules.items()] if column_rules else None
+            }
+        ]
+    }
+    # Remove None values
+    yaml_doc['models'][0] = {k: v for k, v in yaml_doc['models'][0].items() if v is not None}
     return yaml.dump(yaml_doc, sort_keys=False)
 
 # Helper function to parse YAML
 def parse_yaml(yaml_content):
-    return yaml.safe_load(yaml_content)
+    try:
+        return yaml.safe_load(yaml_content)
+    except yaml.YAMLError as e:
+        st.error(f"Error parsing YAML: {e}")
+        return None
 
 def format_rule_nicely(option):
-    x = str(option).replace('dbt_expectations.','')    
-    x = x.replace('_',' ')
-    x = x.replace('dbt_expectations\.','')    
-    x = x.capitalize()
-    return x
+    replacements = {
+        'dbt_expectations.': '',
+        '_': ' ',
+        'dbt_expectations\\.': ''
+    }
+    for old, new in replacements.items():
+        option = option.replace(old, new)
+    return option.capitalize()
 
 st.title("Data Quality Rule Builder")
 
-data, define, view = st.tabs(['Data', 'Define Rules', 'View Rules'])
+data, define, view, exec_tests = st.tabs(['Data', 'Define Rules', 'View Rules', 'Execute Tests'])
 
 with data:
     uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xls", "xlsx"])
-    if uploaded_file:    
+    if uploaded_file:
+        try:
             if uploaded_file.name.endswith(".csv"):
                 data = pd.read_csv(uploaded_file)
             else:
@@ -134,8 +140,12 @@ with data:
             
             st.write("Preview of uploaded file:")
             st.dataframe(data.head())
-            rules = []
-            existing_rules_yaml = st.file_uploader("Reload Existing Rules (YAML)", type=["yaml", "yml"])
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
+    existing_rules_yaml = st.file_uploader("Reload Existing Rules (YAML)", type=["yaml", "yml"])
+    rules = []
+    if existing_rules_yaml:
+        rules = parse_yaml(existing_rules_yaml.read().decode())["expectations"] 
 
     with define:
         if uploaded_file:    
@@ -143,8 +153,7 @@ with data:
             
             st.write("## Define Quality Rules")
 
-            if existing_rules_yaml:
-                rules = parse_yaml(existing_rules_yaml.read().decode())["expectations"]
+
             
             if "tests" not in st.session_state:
                 st.session_state["tests"] = rules
@@ -203,3 +212,42 @@ with data:
                 yaml_output = generate_yaml()
                 st.code(yaml_output, language="yaml")
                 st.download_button("Download YAML", yaml_output, "rules.yaml", "text/yaml")
+        
+        with exec_tests:
+            if uploaded_file:
+                st.write("### Execute Tests")
+                model_name = st.text_input("Enter table name", value="my_table")
+                csv_file = f'{model_name}.csv'
+                dbt_test = st.button("Execute Tests")
+                prog = st.progress(0)
+                if dbt_test:
+                    prog.progress(0.1,text='Running tests...')
+                    st.write(f"Working directory: {os.getcwd()}")
+                    prog.progress(0.2,text='Saving uploaded data...')
+                    b = uploaded_file.getvalue()
+                    with open(f'{csv_file}', "wb") as f:
+                        f.write(b)
+                    prog.progress(0.5,text='Saving SQL...')
+                    sql = f"SELECT * FROM read_csv_auto('../{csv_file}')"
+                    with open(f'expectations/models/example/{model_name}.sql', "w") as f:
+                        f.write(sql)
+                    prog.progress(0.6,text='Saving YAML...')              
+                    # Save the yaml file with the rules
+                    yaml = generate_yaml(model_name)
+                    with open(f'expectations/models/example/{model_name}.yml', "w") as f:
+                        f.write(yaml)
+                    prog.progress(0.7,text='Saved YAML model...')
+                    # initialize
+                    dbt = dbtRunner()
+                    # create CLI args as a list of strings
+                    cli_args = ["run", "--select", model_name]
+                    # run the command
+                    res: dbtRunnerResult = dbt.invoke(cli_args)
+                    # inspect the results
+                    for r in res.result:
+                        st.write(f"{r.node.name}: {r.status}")
+
+
+                    # dbt run - load the data
+                    # dbt test - run the tests
+                    # Capture the results

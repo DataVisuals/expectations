@@ -1,6 +1,6 @@
 version: 2
 models:
-- name: mortgage
+- name: my_table
   description: Synthesised rules from DQ rule builder
   config:
     materialized: 'true'
