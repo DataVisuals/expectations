@@ -4,10 +4,4 @@ models:
   columns:
   - name: account_num
     tests:
-    - dbt_expectations.expect_column_values_to_be_unique
-    - dbt_expectations.expect_column_values_to_be_in_set:
-        value_set:
-        - '1'
-        - '2'
-        - '3'
-        - '4'
+    - dbt_expectations.expect_column_to_exist

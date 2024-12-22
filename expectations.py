@@ -11,10 +11,6 @@ from rules import DBT_RULES
 st.set_page_config(layout='wide')
 uploaded_file = None
 
-# TODO Define all dbt-expectations rules and their parameters
-# TODO Optionals e.g. Group by, Step, is raw, flags, compare_group_by etc
-
-
 def separate_rules(rules: list) -> tuple[dict,dict]: # returns a tuple of table rules and column rules 
     print(f"Trying to separate {rules}")
     table_rules = {}
@@ -53,7 +49,7 @@ def generate_yaml(table_name=None):
         'models': [
             {
                 'name': table_name,
-                'tests': table_rules if table_rules else None,
+                'tests': [table_rules] if table_rules else None,
                 'columns': [{'name': col, 'tests': rules} for col, rules in column_rules.items()] if column_rules else None
             }
         ]
@@ -62,14 +58,8 @@ def generate_yaml(table_name=None):
     yaml_doc['models'][0] = {k: v for k, v in yaml_doc['models'][0].items() if v is not None}
     return yaml.dump(yaml_doc, sort_keys=False, default_flow_style=False)
 
-def parse_yaml(yaml_content):
-    try:
-        return yaml.safe_load(yaml_content)
-    except yaml.YAMLError as e:
-        st.error(f"Error parsing YAML: {e}")
-        return None
-
 def format_rule_nicely(option):
+    toks = option.split('_')
     replacements = {
         'dbt_expectations.': '',
         '_': ' ',
@@ -77,7 +67,7 @@ def format_rule_nicely(option):
     }
     for old, new in replacements.items():
         option = option.replace(old, new)
-    return option.capitalize()
+    return f"{toks[2].capitalize()} - {option.capitalize()}"
 
 def dbt_command(command: str, model_name: str):
     # initialize
@@ -118,11 +108,11 @@ def build_form_from_parameters(column_names, selected_parameters):
         match param:
             case "column" | "column_A" | "column_B" | "group_by_column" | "date_column" | "date_column_name":
                 rule_params[param] = st.selectbox(f"Select {param}", column_names)
-            case 'max_value' | 'min_value' | "value" | "n" | "interval" | "lookback_periods" | "trend_periods" | "threshold" | "factor" | "p" | "sigma_threshold_upper" | "sigma_threshold_lower":
+            case 'max_value' | 'min_value' | "value" | "n" | "interval" | "lookback_periods" | "trend_periods" | "threshold" | "factor" | "p" | "sigma_threshold_upper" | "sigma_threshold_lower" :
                 rule_params[param] = st.number_input(f"Enter {param}", step=0.01)
             case "regex" | "regex_list" | "like_pattern" | "unlike_pattern" | "value_set" | "other_table" |  "exclusion_condition" | "period":
                 rule_params[param] = st.text_input(f"Enter {param}")
-            case "value_set" | "like_pattern_list" | "unlike_pattern_list" | "column_type_list":
+            case "value_set" | "like_pattern_list" | "unlike_pattern_list" | "column_type_list" | "type_list":
                 value_set = st.text_area(f"Enter {param} (comma-separated values)")
                 rule_params[param] = [v.strip() for v in value_set.split(",") if v.strip()]
             case "column_list" | "column_set":
@@ -136,7 +126,7 @@ def build_form_from_parameters(column_names, selected_parameters):
                 rule_params[param] = st.checkbox(f"Check if {param} allows equal values alsoclea")
             case _:
                 print(f"Parameter {param} not implemented")
-                throw(NotImplementedError) # type: ignore
+                raise NotImplementedError 
     return rule_params
 
 def add_rule_to_session(selected_rule, rule_params):
@@ -164,10 +154,13 @@ def save_rules():
 #########################################################################################
 # Streamlit UI
 #########################################################################################
+with st.sidebar.title("Expectations"):
+    st.image('logo.png')
 
 data, define, view, exec_tests = st.tabs(['Data', 'Define Rules', 'View Rules', 'Execute Tests'])
 
 with data:
+    st.subheader("Load some representative sample data to define your expectations with")
     uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xls", "xlsx"])
     if uploaded_file:
         try:
@@ -182,16 +175,12 @@ with data:
     with define:
         if uploaded_file:    
             column_names = list(data.columns)
-            
-            st.write("## Define Quality Rules")
-            
+            st.subheader("Define expectations")
             selected_rule = st.selectbox("Select a Rule", 
                                         list(DBT_RULES.keys()), 
                                         format_func=format_rule_nicely)
             selected_parameters = DBT_RULES[selected_rule]
-            
             rule_params = build_form_from_parameters(column_names, selected_parameters)
-            
             row_condition = st.text_input(f"Enter row condition", placeholder='Enter a condition that will limit the rows this rule is applied to')
             if len(row_condition) > 0:
                 rule_params['row_condition'] = row_condition
@@ -204,13 +193,14 @@ with data:
                 add_rule_to_session(selected_rule, rule_params)
 
         with view:
+            st.subheader("View and Save Rules")
             if uploaded_file and st.session_state.get("tests",None):    
-                display_defined_rules()
                 save_rules()
+                display_defined_rules()
         
         with exec_tests:
+            st.subheader("Does the data meet your expectations?")
             if uploaded_file:
-                st.write("### Execute Tests")
                 model_name = st.text_input("Enter table name", value="my_table")
                 st.session_state['model_name']  = model_name
                 csv_file = f'{model_name}.csv'

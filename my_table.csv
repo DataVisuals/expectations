@@ -1,5 +1,5 @@
-account_num,customer_num,amount,type,remaining,paid,rate
-1,1,1000000,btl,900000,130000,0.0345
-2,2,1000000,btl,900000,130000,0.0217
-3,3,1000000,btl,900000,130000,-0.0345
-4,3,-1000000,btl,900000,130000,300
+account_num,customer_num,amount,type,remaining,paid,rate,bad_email,good_email
+1,1,1000000,btl,900000,130000,0.0345,j.b&gmail.com,a.s@best.com
+2,2,1000000,btl,900000,130000,0.0217,jo. bloggs@gmail.com, trynhave.ago@ifyouthink.com
+3,3,1000000,btl,900000,130000,-0.0345,josephine.bloggs@hotmail.com,simply.best@tina.turner
+4,3,-1000000,btl,900000,130000,300,xxx!.com,what.next@map.com
