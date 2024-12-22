@@ -5,6 +5,7 @@ from io import StringIO
 import os.path
 import json
 from dbt.cli.main import dbtRunner, dbtRunnerResult
+from pprint import pprint
 
 st.set_page_config(layout='wide')
 uploaded_file = None
@@ -15,7 +16,7 @@ DBT_RULES = {
     "dbt_expectations.expect_column_to_exist": ["column"],
     "dbt_expectations.expect_column_values_to_be_unique": ["column"],
     "dbt_expectations.expect_column_values_to_not_be_null": ["column"],
-    "dbt_expectations.expect_column_values_to_be_in_type_list": ["column", "type_list"],
+    "dbt_expectations.expect_column_values_to_be_in_type_list": ["column", "column_type_list"],
     "dbt_expectations.expect_column_values_to_match_regex": ["column", "regex"],
     "dbt_expectations.expect_column_values_to_not_match_regex": ["column", "regex"],
     "dbt_expectations.expect_column_values_to_be_in_set": ["column", "value_set"],
@@ -75,12 +76,19 @@ def separate_rules(rules: list) -> tuple[list,dict]: # returns a tuple of table 
         if 'column' not in rule.keys(): # if rule is a table rule
             table_rules.append(rule)
         else: 
-            wo_column = rule.copy()
-            wo_column.pop('column')
-            if rule['column'] in column_rules.keys(): # if column already exists in column_rules
-                column_rules[rule['column']].append(wo_column)
+            cols_wo_keys = rule.copy()
+            cols_wo_keys.pop('column')
+            rule_name = cols_wo_keys.pop('test')
+            if len(cols_wo_keys) == 0:
+                if rule['column'] in column_rules.keys(): # if column already exists in column_rules
+                    column_rules[rule['column']].append(rule_name)
+                else:
+                    column_rules[rule['column']] = [rule_name]
             else:
-                column_rules[rule['column']] = [wo_column]
+                if rule['column'] in column_rules.keys(): # if column already exists in column_rules
+                    column_rules[rule['column']].append({rule_name: cols_wo_keys})
+                else:
+                    column_rules[rule['column']] = [{rule_name: cols_wo_keys}]
     return table_rules, column_rules
 
 # Helper function to generate YAML
@@ -91,13 +99,13 @@ def generate_yaml(table_name=None):
         table_name = os.path.splitext(uploaded_file.name)[0]
     for col, rules in column_rules.items():
         print(f' Column is {col} rules are {rules}')
+
     yaml_doc = {
         'version': 2,
         'models': [
             {
                 'name': table_name,
                 'description': 'Synthesised rules from DQ rule builder',
-                'config': {'materialized': 'true'},
                 'tests': table_rules if table_rules else None,
                 'columns': [{'name': col, 'tests': rules} for col, rules in column_rules.items()] if column_rules else None
             }
@@ -124,6 +132,24 @@ def format_rule_nicely(option):
     for old, new in replacements.items():
         option = option.replace(old, new)
     return option.capitalize()
+
+def dbt_command(command: str, model_name: str):
+    # initialize
+    dbt = dbtRunner()
+    # create CLI args as a list of strings
+    cli_args = [command, "--select", model_name, "--project-dir", "expectations"]
+    # run the command
+    res: dbtRunnerResult = dbt.invoke(cli_args)
+    # inspect the results
+    results = []
+    for r in res.result:
+        pprint(f"--Result {r}")
+        if r.status == 'pass':
+            icon = '✅'
+        else:
+            icon = '❌'
+        results.append({'Name': r.node.name, 'Result' : icon if command == 'test' else r.status, 'Execution Time': r.execution_time})
+    st.dataframe(pd.DataFrame(results),hide_index=True, width=1000) 
 
 st.title("Data Quality Rule Builder")
 
@@ -174,7 +200,7 @@ with data:
                         rule_params[param] = st.number_input(f"Enter {param}", step=0.01)
                     case "regex":
                         rule_params[param] = st.text_input(f"Enter {param}")
-                    case "value_set" | "type_list" | "like_pattern_list" | "unlike_pattern_list":
+                    case "value_set" | "like_pattern_list" | "unlike_pattern_list" | "column_type_list":
                         value_set = st.text_area(f"Enter {param} (comma-separated values)")
                         rule_params[param] = [v.strip() for v in value_set.split(",") if v.strip()]
                     case "column_list":
@@ -221,33 +247,22 @@ with data:
                 dbt_test = st.button("Execute Tests")
                 prog = st.progress(0)
                 if dbt_test:
-                    prog.progress(0.1,text='Running tests...')
-                    st.write(f"Working directory: {os.getcwd()}")
-                    prog.progress(0.2,text='Saving uploaded data...')
+                    prog.progress(0.1,text='Saving uploaded data...')
                     b = uploaded_file.getvalue()
                     with open(f'{csv_file}', "wb") as f:
                         f.write(b)
-                    prog.progress(0.5,text='Saving SQL...')
-                    sql = f"SELECT * FROM read_csv_auto('../{csv_file}')"
+                    prog.progress(0.2,text='Saving SQL...')
+                    sql = f"SELECT * FROM read_csv_auto('{csv_file}')"
                     with open(f'expectations/models/example/{model_name}.sql', "w") as f:
                         f.write(sql)
-                    prog.progress(0.6,text='Saving YAML...')              
+                    prog.progress(0.3,text='Saving YAML...')              
                     # Save the yaml file with the rules
                     yaml = generate_yaml(model_name)
                     with open(f'expectations/models/example/{model_name}.yml', "w") as f:
                         f.write(yaml)
-                    prog.progress(0.7,text='Saved YAML model...')
-                    # initialize
-                    dbt = dbtRunner()
-                    # create CLI args as a list of strings
-                    cli_args = ["run", "--select", model_name]
-                    # run the command
-                    res: dbtRunnerResult = dbt.invoke(cli_args)
-                    # inspect the results
-                    for r in res.result:
-                        st.write(f"{r.node.name}: {r.status}")
+                    prog.progress(0.4,text='Loading the model...')
+                    dbt_command("run", model_name)
+                    prog.progress(0.9,text='Testing the model...')
+                    res = dbt_command("test", model_name)
 
 
-                    # dbt run - load the data
-                    # dbt test - run the tests
-                    # Capture the results

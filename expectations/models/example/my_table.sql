@@ -1,1 +1,1 @@
-SELECT * FROM read_csv_auto('../my_table.csv')
+SELECT * FROM read_csv_auto('my_table.csv')
