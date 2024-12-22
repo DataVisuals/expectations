@@ -6,69 +6,14 @@ import os.path
 import json
 from dbt.cli.main import dbtRunner, dbtRunnerResult
 from pprint import pprint
+from rules import DBT_RULES
 
 st.set_page_config(layout='wide')
 uploaded_file = None
 
 # TODO Define all dbt-expectations rules and their parameters
 # TODO Optionals e.g. Group by, Step, is raw, flags, compare_group_by etc
-DBT_RULES = {
-    "dbt_expectations.expect_column_to_exist": ["column"],
-    "dbt_expectations.expect_column_values_to_be_unique": ["column"],
-    "dbt_expectations.expect_column_values_to_not_be_null": ["column"],
-    "dbt_expectations.expect_column_values_to_be_in_type_list": ["column", "column_type_list"],
-    "dbt_expectations.expect_column_values_to_match_regex": ["column", "regex"],
-    "dbt_expectations.expect_column_values_to_not_match_regex": ["column", "regex"],
-    "dbt_expectations.expect_column_values_to_be_in_set": ["column", "value_set"],
-    "dbt_expectations.expect_column_values_to_not_be_in_set": ["column", "value_set"],
-    "dbt_expectations.expect_column_values_to_be_between": ["column", "min_value", "max_value", "strict_min", "strict_max"],
-    "dbt_expectations.expect_column_value_lengths_to_be_between": ["column", "min_value", "max_value"],
-    "dbt_expectations.expect_column_value_lengths_to_equal": ["column", "value"],
-    "dbt_expectations.expect_column_median_to_be_between": ["column", "min_value", "max_value"],
-    "dbt_expectations.expect_column_mean_to_be_between": ["column", "min_value", "max_value"],
-    "dbt_expectations.expect_column_min_to_be_between": ["column", "min_value", "max_value"],
-    "dbt_expectations.expect_column_max_to_be_between": ["column", "min_value", "max_value"],
-    "dbt_expectations.expect_column_sum_to_be_between": ["column", "min_value", "max_value"],
-    "dbt_expectations.expect_column_pair_values_a_to_be_greater_than_b": ["column_A", "column_B", "or_equal"],
-    "dbt_expectations.expect_column_pair_values_to_be_in_set": ["column_A", "column_B", "value_set"],
-    "dbt_expectations.expect_compound_columns_to_be_unique": ["column_list"],
-    "dbt_expectations.expect_multicolumn_sum_to_be_between": ["column_list", "min_value", "max_value"],
-    "dbt_expectations.expect_row_values_to_have_data_for_every_n_datepart": [
-        "date_column",
-        "n",
-        "datepart",
-        "interval",
-        "test_start_date",
-        "test_end_date",
-        "row_condition",
-        "exclusion_condition",
-    ],
-    "dbt_expectations.expect_table_row_count_to_be_between": ["min_value", "max_value"],
-    "dbt_expectations.expect_table_column_count_to_be_between": ["min_value", "max_value"],
-    "dbt_expectations.expect_table_columns_to_match_ordered_list": ["column_list"],
-    "dbt_expectations.expect_table_row_count_to_equal_other_table": ["other_table"],
-    "dbt_expectations.expect_column_values_to_match_like_pattern": ["column", "like_pattern"],
-    "dbt_expectations.expect_column_values_to_not_match_like_pattern": ["column", "unlike_pattern"],
-    "dbt_expectations.expect_column_values_to_match_like_pattern_list": ["column", "like_pattern_list"],
-    "dbt_expectations.expect_column_values_to_not_match_like_pattern_list": ["column", "unlike_pattern_list"],
-    "dbt_expectations.expect_column_stdev_to_be_between": ["column", "min_value", "max_value"],
-    "dbt_expectations.expect_column_proportion_of_unique_values_to_be_between": ["column", "min_value", "max_value"],
-    "dbt_expectations.expect_column_most_common_value_to_be_in_set": ["column", "value_set"],
-    "dbt_expectations.expect_column_least_common_value_to_be_in_set": ["column", "value_set"],
-    "dbt_expectations.expect_column_most_common_value_to_match_regex": ["column", "regex"],
-    "dbt_expectations.expect_column_chisquare_test_p_value_to_be_greater_than": ["column", "value_set", "p"],
-    "dbt_expectations.expect_column_pair_cramers_phi_value_to_be_less_than": ["column_A", "column_B", "threshold"],
-    "dbt_expectations.expect_column_kl_divergence_to_be_less_than": ["column", "partition_object", "threshold"],
-    "dbt_expectations.expect_table_to_contain_column_list": ["column_list"],
-    "dbt_expectations.expect_table_row_count_to_be_greater_than": ["min_value"],
-    "dbt_expectations.expect_table_row_count_to_be_less_than": ["max_value"],
-    "dbt_expectations.expect_table_row_count_to_be_equal_to": ["value"],
-    "dbt_expectations.expect_table_row_count_to_be_nonzero": [],
-    "dbt_expectations.expect_table_to_have_no_duplicate_rows": ["column_list"],
-    "dbt_expectations.expect_table_columns_to_match_set": ["column_set"],
-    "dbt_expectations.expect_table_columns_to_be_subset_of": ["column_set"],
-    "dbt_expectations.expect_table_columns_to_contain_set": ["column_list"], # Add transform.
-}
+
 
 def separate_rules(rules: list) -> tuple[dict,dict]: # returns a tuple of table rules and column rules 
     print(f"Trying to separate {rules}")
@@ -167,32 +112,31 @@ def write_yaml(generate_yaml, model_name):
     with open(f'expectations/models/example/{model_name}.yml', "w") as f:
         f.write(yaml)
 
-def build_form_from_parameters(headers, selected_parameters):
+def build_form_from_parameters(column_names, selected_parameters):
     rule_params = {}
     for param in selected_parameters:
         match param:
-            case "column":
-                rule_params[param] = st.selectbox(f"Select {param}", headers)
-            case "column_A" | "column_B":
-                rule_params[param] = st.selectbox(f"Select {param}", headers)
-            case 'max_value' | 'min_value':
+            case "column" | "column_A" | "column_B" | "group_by_column" | "date_column" | "date_column_name":
+                rule_params[param] = st.selectbox(f"Select {param}", column_names)
+            case 'max_value' | 'min_value' | "value" | "n" | "interval" | "lookback_periods" | "trend_periods" | "threshold" | "factor" | "p" | "sigma_threshold_upper" | "sigma_threshold_lower":
                 rule_params[param] = st.number_input(f"Enter {param}", step=0.01)
-            case "regex":
+            case "regex" | "regex_list" | "like_pattern" | "unlike_pattern" | "value_set" | "other_table" |  "exclusion_condition" | "period":
                 rule_params[param] = st.text_input(f"Enter {param}")
             case "value_set" | "like_pattern_list" | "unlike_pattern_list" | "column_type_list":
                 value_set = st.text_area(f"Enter {param} (comma-separated values)")
                 rule_params[param] = [v.strip() for v in value_set.split(",") if v.strip()]
-            case "column_list":
-                column_list = st.multiselect(f"Select {param}", headers)
+            case "column_list" | "column_set":
+                column_list = st.multiselect(f"Select {param}", column_names)
                 rule_params[param] = column_list
-            case "date_column":
-                rule_params[param] = st.selectbox(f"Select {param}", headers)
-            case "n":
-                rule_params[param] = st.number_input(f"Enter {param} (e.g., days, months)", step=1)
             case "datepart":
                 rule_params[param] = st.selectbox(f"Select {param}", ["day", "month", "year"])
-            case "interval":
-                rule_params[param] = st.number_input(f"Enter {param} (e.g., every N intervals)", step=1)
+            case "test_start_date" | "test_end_date":
+                rule_params[param] = st.date_input(f"Enter {param}")
+            case "or_equal":
+                rule_params[param] = st.checkbox(f"Check if {param} allows equal values alsoclea")
+            case _:
+                print(f"Parameter {param} not implemented")
+                throw(NotImplementedError) # type: ignore
     return rule_params
 
 def add_rule_to_session(selected_rule, rule_params):
@@ -237,7 +181,7 @@ with data:
             st.error(f"Error reading file: {e}")
     with define:
         if uploaded_file:    
-            headers = list(data.columns)
+            column_names = list(data.columns)
             
             st.write("## Define Quality Rules")
             
@@ -246,7 +190,7 @@ with data:
                                         format_func=format_rule_nicely)
             selected_parameters = DBT_RULES[selected_rule]
             
-            rule_params = build_form_from_parameters(headers, selected_parameters)
+            rule_params = build_form_from_parameters(column_names, selected_parameters)
             
             row_condition = st.text_input(f"Enter row condition", placeholder='Enter a condition that will limit the rows this rule is applied to')
             if len(row_condition) > 0:
