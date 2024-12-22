@@ -3,7 +3,7 @@
 
 This project allows anyone to provide a test file in csv or excel format that can be used to define tests suitable for execution using dbt-expectations. The file is used to determine columns available for testing and test data to run the expectations against.
 
-The app runs using streamlit 
+The app runs using streamlit from the project root directory
 
 ```
 streamlit run expectations.py
