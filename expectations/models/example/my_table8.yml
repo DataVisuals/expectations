@@ -1,9 +1,0 @@
-version: 2
-models:
-- name: my_table8
-  description: Synthesised rules from DQ rule builder
-  columns:
-  - name: account
-    tests:
-    - dbt_expectations.expect_column_to_exist
-    - dbt_expectations.expect_column_values_to_be_unique

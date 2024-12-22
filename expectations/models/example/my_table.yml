@@ -1,13 +1,29 @@
 version: 2
 models:
 - name: my_table
-  description: Synthesised rules from DQ rule builder
   columns:
   - name: account
     tests:
-    - dbt_expectations.expect_column_to_exist
-    - dbt_expectations.expect_column_values_to_be_unique
-    - dbt_expectations.expect_column_values_to_not_be_null
     - dbt_expectations.expect_column_values_to_be_in_type_list:
         column_type_list:
-        - str
+        - varchar
+  - name: customer
+    tests:
+    - dbt_expectations.expect_column_values_to_be_in_type_list:
+        column_type_list:
+        - varchar
+  - name: paid
+    tests:
+    - dbt_expectations.expect_column_values_to_be_in_type_list:
+        column_type_list:
+        - bigint
+  - name: type
+    tests:
+    - dbt_expectations.expect_column_values_to_match_regex:
+        regex: b.*
+    - dbt_expectations.expect_column_values_to_be_in_set:
+        value_set:
+        - btl
+    - dbt_expectations.expect_column_values_to_be_in_set:
+        value_set:
+        - btw

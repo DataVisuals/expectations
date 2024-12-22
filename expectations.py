@@ -67,14 +67,19 @@ DBT_RULES = {
     "dbt_expectations.expect_table_to_have_no_duplicate_rows": ["column_list"],
     "dbt_expectations.expect_table_columns_to_match_set": ["column_set"],
     "dbt_expectations.expect_table_columns_to_be_subset_of": ["column_set"],
+    "dbt_expectations.expect_table_columns_to_contain_set": ["column_list"], # Add transform.
 }
 
-def separate_rules(rules: list) -> tuple[list,dict]: # returns a tuple of table rules and column rules 
-    table_rules = []
+def separate_rules(rules: list) -> tuple[dict,dict]: # returns a tuple of table rules and column rules 
+    print(f"Trying to separate {rules}")
+    table_rules = {}
     column_rules = {}
     for rule in rules:
         if 'column' not in rule.keys(): # if rule is a table rule
-            table_rules.append(rule)
+            table_rule = rule.copy()
+            print(f'Table rule is {table_rule}')
+            rule_name = table_rule.pop('test')
+            table_rules[rule_name] = table_rule
         else: 
             cols_wo_keys = rule.copy()
             cols_wo_keys.pop('column')
@@ -92,7 +97,6 @@ def separate_rules(rules: list) -> tuple[list,dict]: # returns a tuple of table 
     return table_rules, column_rules
 
 # Helper function to generate YAML
-# TODO Ensure the format matches the working model definition
 def generate_yaml(table_name=None):
     table_rules, column_rules = separate_rules(st.session_state["tests"])
     if table_name is None:
@@ -105,7 +109,6 @@ def generate_yaml(table_name=None):
         'models': [
             {
                 'name': table_name,
-                'description': 'Synthesised rules from DQ rule builder',
                 'tests': table_rules if table_rules else None,
                 'columns': [{'name': col, 'tests': rules} for col, rules in column_rules.items()] if column_rules else None
             }
@@ -113,7 +116,7 @@ def generate_yaml(table_name=None):
     }
     # Remove None values
     yaml_doc['models'][0] = {k: v for k, v in yaml_doc['models'][0].items() if v is not None}
-    return yaml.dump(yaml_doc, sort_keys=False)
+    return yaml.dump(yaml_doc, sort_keys=False, default_flow_style=False)
 
 # Helper function to parse YAML
 def parse_yaml(yaml_content):
@@ -143,7 +146,7 @@ def dbt_command(command: str, model_name: str):
     # inspect the results
     results = []
     for r in res.result:
-        pprint(f"--Result {r}")
+        #pprint(f"--Result {r}")
         if r.status == 'pass':
             icon = '✅'
         else:
@@ -151,10 +154,26 @@ def dbt_command(command: str, model_name: str):
         results.append({'Name': r.node.name, 'Result' : icon if command == 'test' else r.status, 'Execution Time': r.execution_time})
     st.dataframe(pd.DataFrame(results),hide_index=True, width=1000) 
 
-st.title("Data Quality Rule Builder")
-
 data, define, view, exec_tests = st.tabs(['Data', 'Define Rules', 'View Rules', 'Execute Tests'])
 
+def write_csv(uploaded_file, csv_file):
+    b = uploaded_file.getvalue()
+    with open(f'{csv_file}', "wb") as f:
+        f.write(b)
+
+def write_sql(model_name, csv_file):
+    sql = f"SELECT * FROM read_csv_auto('{csv_file}')"
+    with open(f'expectations/models/example/{model_name}.sql', "w") as f:
+        f.write(sql)
+
+def write_yaml(generate_yaml, model_name):
+    yaml = generate_yaml(model_name)
+    with open(f'expectations/models/example/{model_name}.yml', "w") as f:
+        f.write(yaml)
+
+#########################################################################################
+# Streamlit UI
+#########################################################################################
 with data:
     uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xls", "xlsx"])
     if uploaded_file:
@@ -163,26 +182,15 @@ with data:
                 data = pd.read_csv(uploaded_file)
             else:
                 data = pd.read_excel(uploaded_file)
-            
             st.write("Preview of uploaded file:")
             st.dataframe(data.head())
         except Exception as e:
             st.error(f"Error reading file: {e}")
-    existing_rules_yaml = st.file_uploader("Reload Existing Rules (YAML)", type=["yaml", "yml"])
-    rules = []
-    if existing_rules_yaml:
-        rules = parse_yaml(existing_rules_yaml.read().decode())["expectations"] 
-
     with define:
         if uploaded_file:    
             headers = list(data.columns)
             
             st.write("## Define Quality Rules")
-
-
-            
-            if "tests" not in st.session_state:
-                st.session_state["tests"] = rules
             
             selected_rule = st.selectbox("Select a Rule", 
                                         list(DBT_RULES.keys()), 
@@ -224,45 +232,48 @@ with data:
                 rule_params['strictly'] = False
 
             if st.button("Add Rule"):
-                st.session_state["tests"].append({"test": selected_rule, **rule_params})
+                # tests param in session state is a list of dictionaries
+                # each dictionary contains the rule and its parameters
+                if st.session_state.get("tests", None) is None:
+                    st.session_state["tests"] = [{"test": selected_rule, **rule_params}]
+                else:
+                    st.session_state["tests"].append({"test": selected_rule, **rule_params})
 
         with view:
-            if uploaded_file:    
+            if uploaded_file and st.session_state.get("tests",None):    
                 st.write("### Defined Rules")
                 for idx, rule in enumerate(st.session_state["tests"]):
                     st.write(f"Test {idx + 1}: {rule}")
                     if st.button(f"Remove Test {idx + 1}", key=f"remove_{idx}"):
                         st.session_state["tests"].pop(idx)
-                
-                st.write("## Export Rules to YAML")
-                yaml_output = generate_yaml()
+                st.write("## Save the rulesL")
+                if st.session_state.get('model_name', None):
+                    yaml_output = generate_yaml(st.session_state.get('model_name'))
+                else:
+                    yaml_output = generate_yaml()
                 st.code(yaml_output, language="yaml")
-                st.download_button("Download YAML", yaml_output, "rules.yaml", "text/yaml")
+                #st.download_button("Download YAML", yaml_output, "rules.yaml", "text/yaml")
         
         with exec_tests:
             if uploaded_file:
                 st.write("### Execute Tests")
                 model_name = st.text_input("Enter table name", value="my_table")
+                st.session_state['model_name']  = model_name
                 csv_file = f'{model_name}.csv'
                 dbt_test = st.button("Execute Tests")
                 prog = st.progress(0)
                 if dbt_test:
-                    prog.progress(0.1,text='Saving uploaded data...')
-                    b = uploaded_file.getvalue()
-                    with open(f'{csv_file}', "wb") as f:
-                        f.write(b)
-                    prog.progress(0.2,text='Saving SQL...')
-                    sql = f"SELECT * FROM read_csv_auto('{csv_file}')"
-                    with open(f'expectations/models/example/{model_name}.sql', "w") as f:
-                        f.write(sql)
-                    prog.progress(0.3,text='Saving YAML...')              
+                    prog.progress(10,text='Saving uploaded data...')
+                    write_csv(uploaded_file, csv_file)
+                    prog.progress(20,text='Saving SQL...')
+                    write_sql(model_name, csv_file)
+                    prog.progress(30,text='Saving YAML...')              
                     # Save the yaml file with the rules
-                    yaml = generate_yaml(model_name)
-                    with open(f'expectations/models/example/{model_name}.yml', "w") as f:
-                        f.write(yaml)
-                    prog.progress(0.4,text='Loading the model...')
+                    write_yaml(generate_yaml, model_name)
+                    prog.progress(40,text='Loading the model...')
                     dbt_command("run", model_name)
-                    prog.progress(0.9,text='Testing the model...')
+                    prog.progress(90,text='Testing the model...')
                     res = dbt_command("test", model_name)
+                    prog.progress(100,text='See results below.')
 
 
