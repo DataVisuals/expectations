@@ -154,14 +154,15 @@ def save_rules():
 #########################################################################################
 # Streamlit UI
 #########################################################################################
-with st.sidebar.title("Expectations"):
-    st.image('logo.png')
+uploaded_file = None
+with st.sidebar:
+    st.sidebar.image('logo.jpeg',use_container_width=True)
+    st.write("Load some representative sample data to define your expectations")
+    uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xls", "xlsx"])
 
 data, define, view, exec_tests = st.tabs(['Data', 'Define Rules', 'View Rules', 'Execute Tests'])
 
 with data:
-    st.subheader("Load some representative sample data to define your expectations with")
-    uploaded_file = st.file_uploader("Upload CSV or Excel file", type=["csv", "xls", "xlsx"])
     if uploaded_file:
         try:
             if uploaded_file.name.endswith(".csv"):
